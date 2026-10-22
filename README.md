@@ -1,3 +1,21 @@
+# newpaper
+
+This repository is Slothwatching's fork of [QuantumNous/new-api](https://github.com/QuantumNous/new-api). The foundation reuses New API's gateway and management capabilities; paper-writing customization is planned separately.
+
+The initial fork baseline is `0c2af9780e45f6f9073528fb0fcbdcd64b5d9495` (upstream `main`, 2026-10-22), not a tagged stable release. Earlier project setup and PR history remain in [newpaper-bootstrap](https://github.com/Slothwatching/newpaper-bootstrap).
+
+## Development
+
+Use Go 1.26.10 and Bun 1.4.0. From the repository root, run `make build-web`, then `go run .`. The application serves port 3000 by default; complete the administrator setup in the browser. Without `SQL_DSN`, the application uses a local SQLite database. See `.env.example` for configuration; keep credentials and local data out of Git.
+
+For checks, run `make test` and `GOWORK=off go build ./...`; in `web/`, run `bun run typecheck` and `bun run test`. The inherited CI also vets and builds the root, relaykit, and tokenkit modules independently.
+
+Changes to `main` require a PR, with no peer approval required. Internal maintainers keep intent records in the sibling private operations repository; public contributors do not need access to it. See [AGENTS.md](AGENTS.md) for the workflow. Configure this repository as `origin` and QuantumNous/new-api as `upstream`; integrate later upstream updates on a branch through a PR, preserving local changes.
+
+The upstream README and attribution follow unchanged.
+
+---
+
 <div align="center">
 
 ![new-api](/web/public/logo.png)
