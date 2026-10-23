@@ -1,0 +1,27 @@
+name: Landing preview
+
+on:
+  pull_request:
+    paths:
+      - 'landing/**'
+      - '.github/workflows/landing.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'landing/**'
+      - '.github/workflows/landing.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: Landing JavaScript syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Check browser script syntax
+        run: node --check landing/app.js
