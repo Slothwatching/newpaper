@@ -37,9 +37,29 @@ current-directory symlink after verification, retaining the previous release for
 rollback. Inspect existing listeners and configuration before choosing a port.
 Keep the demo label until the content and access instructions are finalized.
 
-This directory contains no deployment credentials and does not enable automatic
-server deployments. The landing workflow checks JavaScript syntax on relevant
-changes; the repository's existing required checks continue to apply to PRs.
+The landing workflow checks JavaScript syntax and deployment receiver tests on
+PRs. After required repository CI allows a PR to merge, pushes to `main`
+automatically deploy the tested commit. Manual workflow dispatch is also supported
+on `main`; other branches cannot deploy. Superseded commits are skipped and
+production jobs are serialized.
+
+The `landing-preview` GitHub environment permits only `main` and stores the
+`LANDING_HOST` variable plus `LANDING_DEPLOY_KEY` and `LANDING_KNOWN_HOSTS` secrets.
+The dedicated `newpaper-deploy` SSH user has no sudo privileges. Its authorized
+key uses `restrict,command="/usr/bin/python3 -I /usr/local/lib/newpaper-deploy.py"`;
+it can only send a bounded archive of the three static files. The receiver is
+installed by an administrator from `deploy-receiver.py` and is root-owned.
+Changes to the receiver require administrator installation before deployment;
+the workflow cannot update executable server code or Nginx configuration.
+
+The receiver publishes a versioned directory, atomically switches `current`, and
+checks the local HTTP response for all three files. It restores the previous
+symlink on failure. Actions also compares the public HTTP files to the source.
+Up to five full-SHA releases are retained, preserving current and previous targets;
+failed new releases are removed after rollback. The initial manual release is
+left intact. To roll back content, revert the relevant
+PR through another PR; the reverted content deploys after merge. Deployment keys
+and host identity records belong in the environment secrets, never in Git.
 
 ## Content provenance
 

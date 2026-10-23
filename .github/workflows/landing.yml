@@ -7,9 +7,6 @@ on:
       - '.github/workflows/landing.yml'
   push:
     branches: [main]
-    paths:
-      - 'landing/**'
-      - '.github/workflows/landing.yml'
   workflow_dispatch:
 
 permissions:
@@ -25,3 +22,52 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Check browser script syntax
         run: node --check landing/app.js
+      - name: Test deployment receiver
+        run: python3 -m unittest discover -s landing -p 'test_deploy_receiver.py'
+
+  deploy:
+    name: Deploy landing preview
+    needs: syntax
+    if: github.repository == 'Slothwatching/newpaper' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: landing-preview
+      url: http://${{ vars.LANDING_HOST }}
+    concurrency:
+      group: landing-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Deploy current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_KEY: ${{ secrets.LANDING_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.LANDING_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.LANDING_HOST }}
+        run: |
+          set -euo pipefail
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [ "$latest" != "$GITHUB_SHA" ]; then
+            echo "Skipping superseded commit $GITHUB_SHA"
+            exit 0
+          fi
+          ssh_dir=$(mktemp -d)
+          trap 'rm -rf "$ssh_dir"' EXIT
+          chmod 700 "$ssh_dir"
+          printf '%s\n' "$DEPLOY_KEY" > "$ssh_dir/key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
+          tar -C landing -cf "$ssh_dir/landing.tar" index.html style.css app.js
+          ssh -F /dev/null -i "$ssh_dir/key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$ssh_dir/known_hosts" -o ConnectTimeout=20 \
+            "newpaper-deploy@$DEPLOY_HOST" "deploy $GITHUB_SHA" < "$ssh_dir/landing.tar"
+          for file in index.html style.css app.js; do
+            curl --fail --silent --show-error --retry 3 --max-time 20 \
+              "http://$DEPLOY_HOST/$file" -o "$ssh_dir/$file"
+            cmp "landing/$file" "$ssh_dir/$file"
+          done
