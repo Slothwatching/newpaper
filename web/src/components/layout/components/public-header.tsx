@@ -64,7 +64,6 @@ export interface PublicHeaderProps {
 
 export function PublicHeader(props: PublicHeaderProps) {
   const {
-    navLinks = defaultTopNavLinks,
     showThemeSwitch = true,
     showLanguageSwitcher = true,
     logo: customLogo,
@@ -97,7 +96,9 @@ export function PublicHeader(props: PublicHeaderProps) {
   const user = auth.user
   const isAuthenticated = !!user
   const displaySiteName = customSiteName || systemName
-  const links = dynamicLinks.length > 0 ? dynamicLinks : navLinks
+  const links =
+    props.navLinks ??
+    (dynamicLinks.length > 0 ? dynamicLinks : defaultTopNavLinks)
 
   let logoContent: ReactNode = (
     <HeaderLogo

@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'landing/**'
+      - 'web/**'
       - '.github/workflows/landing.yml'
   push:
     branches: [main]
@@ -23,14 +24,39 @@ jobs:
       - name: Check browser script syntax
         run: node --check landing/app.js
       - name: Test deployment receiver
-        run: python3 -m unittest discover -s landing -p 'test_deploy_receiver.py'
+        run: python3 -m unittest discover -s landing -p 'test*deploy_receiver.py'
+
+  build:
+    name: Build integrated frontend
+    needs: syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.4.0'
+      - name: Build application frontend
+        working-directory: web
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+      - name: Save static frontend
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: newpaper-web
+          path: web/dist/
+          retention-days: 3
+          if-no-files-found: error
 
   deploy:
-    name: Deploy landing preview
-    needs: syntax
+    name: Deploy integrated frontend
+    needs: build
     if: github.repository == 'Slothwatching/newpaper' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     environment:
       name: landing-preview
       url: http://${{ vars.LANDING_HOST }}
@@ -42,6 +68,11 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+      - name: Download built frontend
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: newpaper-web
+          path: web/dist
       - name: Deploy current main
         env:
           GH_TOKEN: ${{ github.token }}
@@ -61,13 +92,11 @@ jobs:
           printf '%s\n' "$DEPLOY_KEY" > "$ssh_dir/key"
           printf '%s\n' "$KNOWN_HOSTS" > "$ssh_dir/known_hosts"
           chmod 600 "$ssh_dir/key" "$ssh_dir/known_hosts"
-          tar -C landing -cf "$ssh_dir/landing.tar" index.html style.css app.js
-          ssh -F /dev/null -i "$ssh_dir/key" \
+          tar -C web/dist -cf "$ssh_dir/landing.tar" .
+          ssh -C -F /dev/null -i "$ssh_dir/key" \
             -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$ssh_dir/known_hosts" -o ConnectTimeout=20 \
             "newpaper-deploy@$DEPLOY_HOST" "deploy $GITHUB_SHA" < "$ssh_dir/landing.tar"
-          for file in index.html style.css app.js; do
-            curl --fail --silent --show-error --retry 3 --max-time 20 \
-              "http://$DEPLOY_HOST/$file" -o "$ssh_dir/$file"
-            cmp "landing/$file" "$ssh_dir/$file"
-          done
+          curl --fail --silent --show-error --retry 3 --max-time 20 \
+            "http://$DEPLOY_HOST/" -o "$ssh_dir/index.html"
+          cmp web/dist/index.html "$ssh_dir/index.html"
